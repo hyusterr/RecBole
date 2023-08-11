@@ -1,0 +1,10 @@
+dataset: ml-1m
+train_neg_sample_args:
+  distribution: uniform
+  sample_num: 32
+model: BPR
+gpu_id: 0
+eval_args:
+  split:
+    'RS': [0.8,0.5,0.15]
+topk: [1, 10, 20, 30, 50, 100]
