@@ -16,6 +16,25 @@ Common Loss in recommender system
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
+
+class DALoss(nn.Module):
+    """
+    Distance-Aware loss
+    Args:
+        - alpha(int): 0: torch.tanh, 1: torch.sigmoid
+    """
+    def __init__(self, alpha):
+        super(DALoss, self).__init__()
+        self.alpha = alpha
+
+    def forward(self, predictions, normalized_distances):
+        if self.alpha == 0:
+            predictions = torch.tanh(predictions)
+        elif self.alpha == 1:
+            predictions = torch.sigmoid(predictions)
+        loss = F.mse_loss(predictions, normalized_distances)
+        return loss
 
 
 class BPRLoss(nn.Module):
