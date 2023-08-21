@@ -109,6 +109,132 @@ class GeneralRecommender(AbstractRecommender):
         self.device = config["device"]
 
 
+    @staticmethod
+    def get_unique_ids(id_tensors):
+        """
+        Get unique ids from id tensors.
+
+        Args:
+            id_tensors (torch.LongTensor): The input tensor that contains ids, shape: [batch_size, seq_len]
+        """
+        return torch.unique(id_tensors)
+
+    
+    def DA_loss_full(self, user_idx, item_idx):
+        """
+        user_idx: (batch_size, ) ### the passed in index is already in device
+        item_idx: (batch_size, )
+        TODO: quite chaos, need to be reorganize the idx
+        - input indexes?
+        - input full data_dist_matrix and then slicing
+            or input the dist matrix of the batch?
+        - remember the encoding of the data_dist_matrix is different from the user/item tower
+        """
+        # make sure no duplicate idx
+        user_idx = torch.unique(user_idx)
+        item_idx = torch.unique(item_idx)
+        # re-encoding items idx
+        item_idx_global = item_idx + self.n_users
+
+        # get answer
+        node_idx = torch.cat([user_idx, item_idx_global], dim=0)
+        dist_ans = self.data_dist_matrix[:, node_idx][node_idx, :]
+        # shape = (n_batch, n_batch)
+
+        # get prediction # this will be slower because of pass into tower 2 times
+        user_emb = self.user_tower(user_idx)  # model produced = from cuda device
+        item_emb = self.item_tower(item_idx)  # when comes to model use local id
+        node_emb = torch.cat([user_emb, item_emb], dim=0)
+        dist_pred = torch.matmul(node_emb, node_emb.T)
+        # shape = (n_batch, dim) x (dim, n_batch) = (n_batch, n_batch)
+
+        assert dist_ans.shape == dist_pred.shape
+        upper_triu_idx = torch.triu_indices(*dist_pred.shape, device=self.device)
+        dist_pred = dist_pred[upper_triu_idx[0], upper_triu_idx[1]]
+        dist_ans = dist_ans[upper_triu_idx[0], upper_triu_idx[1]]
+
+        if self.alpha_DA == 0:
+            dist_pred = torch.tanh(dist_pred)
+        elif self.alpha_DA == 1:
+            dist_pred = torch.sigmoid(dist_pred)
+        # dist_ans = torch.tensor(dist_ans, dtype=torch.float32)
+
+        DA_loss = self.mse_loss(dist_pred, dist_ans)
+        # TODO: use self.mse_loss? check old implementation
+        return DA_loss
+
+    def DA_loss_ui(self, user_idx, item_idx):
+        """
+        only consider the user-item positive pairs (check the paper)?
+        """
+        # get indexes
+        user_idx = torch.unique(user_idx)
+        item_idx = torch.unique(item_idx)
+
+        # get embeddings
+        user_emb = self.user_tower(user_idx)
+        item_emb = self.item_tower(item_idx)
+
+        # get answer
+        # get the submatrix of the dist matrix (user, item) so no need to re-encoding
+        # put the data_dist_matrix to device at the beginning
+        dist_ans = self.data_dist_matrix[: self.n_users, self.n_users :][user_idx, :][:, item_idx]
+
+        # get prediction
+        dist_pred = torch.matmul(user_emb, item_emb.T)
+        # TODO: check the torch slicing mechanism? can I do slicing like this?
+        # TODO: refine this part
+        if self.alpha_DA == 0:
+            dist_pred = torch.tanh(dist_pred)
+        elif self.alpha_DA == 1:
+            dist_pred = torch.sigmoid(dist_pred)
+        DA_loss = self.mse_loss(dist_pred, dist_ans)
+
+        return DA_loss
+
+    # if each loss eat idx => pass idx into tower 2 times each iteration
+    def DA_loss_anchor(self, user_idx, item_idx, all_emb, reselect_anchor=True):
+        '''
+        anchor set should be obtained epoch-wise, i.e. sample anchor set for each epoch
+        all_emb: (n_users + n_items, dim) # all embeddings, concatenated user and item
+        can get with self.generate(split=False)
+        '''
+        if reselect_anchor:
+            anchor_set_id, dist_max, dist_argmax = self.preselect_anchor(self.n_params, self.data_dist_matrix, self.device) # already on device
+            self.anchor_set_id = anchor_set_id
+            self.dist_max = dist_max
+            self.dist_argmax = dist_argmax
+        
+        # it is like DA_full but only consider the anchor set
+        item_idx_global = item_idx + self.n_users
+        idx = torch.cat((user_idx, item_idx_global), dim=-1)
+        idx = torch.unique(idx) # global idx
+        used_anchor_ids = self.dist_argmax[idx].flatten() # only update those in anchor set
+        all_used_ids = torch.unique(torch.cat((idx, used_anchor_ids), dim=-1))
+        
+
+        reshape_feature = (
+            all_emb[idx, :].unsqueeze(1).expand(-1, self.dist_max.shape[1], -1)
+        )
+
+        subset_features = all_emb[self.dist_argmax.flatten(), :]
+        subset_features = subset_features.view(
+            (self.dist_argmax.shape[0], self.dist_argmax.shape[1], all_emb.shape[1])
+        )
+        subset_features = subset_features[idx, :, :]
+        dot_product = torch.einsum("bij,bij->bi", reshape_feature, subset_features)
+
+        if self.alpha_DA == 0:  # normalize to -1 and 1 so tanh
+            dot_product = torch.tanh(dot_product)
+        elif self.alpha_DA == 1:  # normalize to 0 and 1 so sigmoid
+            dot_product = torch.sigmoid(dot_product)
+
+        dist_max = self.dist_max[idx, :]
+        DA_loss = self.mse_loss(dot_product, dist_max)
+
+        return DA_loss
+
+
 class AutoEncoderMixin(object):
     """This is a common part of auto-encoders. All the auto-encoder models should inherit this class,
     including CDAE, MacridVAE, MultiDAE, MultiVAE, RaCT and RecVAE.
