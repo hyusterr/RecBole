@@ -434,7 +434,8 @@ class Trainer(AbstractTrainer):
         for epoch_idx in range(self.start_epoch, self.epochs):
             # train
             training_start_time = time()
-            train_loss = self._train_epoch(
+            # modify here to capture main_loss, da_loss, beta_e
+            train_loss, main_loss, da_loss, beta_e = self._train_epoch(
                 train_data, epoch_idx, show_progress=show_progress
             )
             self.train_loss_dict[epoch_idx] = (
@@ -448,7 +449,14 @@ class Trainer(AbstractTrainer):
                 self.logger.info(train_loss_output)
             self._add_train_loss_to_tensorboard(epoch_idx, train_loss)
             self.wandblogger.log_metrics(
-                {"epoch": epoch_idx, "train_loss": train_loss, "train_step": epoch_idx},
+                {
+                    "epoch": epoch_idx, 
+                    "train_loss": train_loss, 
+                    "train_step": epoch_idx, 
+                    "main_loss": main_loss, 
+                    "da_loss": da_loss, 
+                    "beta_e": beta_e
+                },
                 head="train",
             )
 
