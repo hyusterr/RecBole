@@ -88,6 +88,7 @@ class AbstractRecommender(nn.Module):
         )
 
 
+# revise this for DAGCF
 class GeneralRecommender(AbstractRecommender):
     """This is a abstract general recommender. All the general model should implement this class.
     The base general recommender class provide the basic dataset and parameters information.
@@ -95,7 +96,7 @@ class GeneralRecommender(AbstractRecommender):
 
     type = ModelType.GENERAL
 
-    def __init__(self, config, dataset):
+    def __init__(self, config, dataset, data_dist_matrix):
         super(GeneralRecommender, self).__init__()
 
         # load dataset info
@@ -105,22 +106,40 @@ class GeneralRecommender(AbstractRecommender):
         self.n_users = dataset.num(self.USER_ID)
         self.n_items = dataset.num(self.ITEM_ID)
 
+        # the data_dist_matrix ids should align to dataset preprocessing
+        self.data_dist_matrix = data_dist_matrix
+        self.mse_loss = nn.MSELoss()
+
         # load parameters info
         self.device = config["device"]
 
 
-    @staticmethod
-    def get_unique_ids(id_tensors):
         """
-        Get unique ids from id tensors.
-
-        Args:
-            id_tensors (torch.LongTensor): The input tensor that contains ids, shape: [batch_size, seq_len]
+        get the user/item tower function of implemented methods
+        can not leverage self.predict() directly since there may conatin u-u relation or i-i relation
+        NOTES on self.predict() of models
+        - BPR: user_e, item_e = self.forward(user, item)
+        - LightGCN: user_all_embedding, item_all_mebedding = self.forward()
+        - LINE: h_embedding = self.user_embeddings; t_embeding = self.item_embedding(t)
+        - ngcf: user_all_embeddings, item_all_embeddings = self.forward()
+        - dgcf: u_embedding, i_embedding = self.forward()
         """
-        return torch.unique(id_tensors)
 
-    
-    def DA_loss_full(self, user_idx, item_idx):
+    # TODO: current version seems like there are re-get embeddings, will that affect learning?
+    # it will definitely cause lateness
+    def get_user_embedding(self, user):
+        raise NotImplementedError
+
+
+    def get_item_embedding(self, item):
+        raise NotImplementedError
+
+
+    def generate(self, split=False):
+        raise NotImplementedError
+
+   
+    def calculate_DA_loss_full(self, interaction):
         """
         user_idx: (batch_size, ) ### the passed in index is already in device
         item_idx: (batch_size, )
@@ -130,9 +149,12 @@ class GeneralRecommender(AbstractRecommender):
             or input the dist matrix of the batch?
         - remember the encoding of the data_dist_matrix is different from the user/item tower
         """
+        
         # make sure no duplicate idx
-        user_idx = torch.unique(user_idx)
-        item_idx = torch.unique(item_idx)
+        user_idx = torch.unique(interaction[self.USER_ID])
+        pos_item_idx = interaction[self.ITEM_ID]
+        neg_item_idx = interaction[self.NEG_ITEM_ID]
+        item_idx = torch.unique(torch.cat([pos_item_idx, neg_item_idx], dim=0))
         # re-encoding items idx
         item_idx_global = item_idx + self.n_users
 
@@ -141,9 +163,9 @@ class GeneralRecommender(AbstractRecommender):
         dist_ans = self.data_dist_matrix[:, node_idx][node_idx, :]
         # shape = (n_batch, n_batch)
 
-        # get prediction # this will be slower because of pass into tower 2 times
-        user_emb = self.user_tower(user_idx)  # model produced = from cuda device
-        item_emb = self.item_tower(item_idx)  # when comes to model use local id
+        # get prediction # this will be slower because of pass into tower 2 times?
+        user_emb = self.get_user_embedding(user_idx)  # model produced = from cuda device
+        item_emb = self.get_item_embedding(item_idx)  # when comes to model use local id
         node_emb = torch.cat([user_emb, item_emb], dim=0)
         dist_pred = torch.matmul(node_emb, node_emb.T)
         # shape = (n_batch, dim) x (dim, n_batch) = (n_batch, n_batch)
@@ -163,25 +185,25 @@ class GeneralRecommender(AbstractRecommender):
         # TODO: use self.mse_loss? check old implementation
         return DA_loss
 
-    def DA_loss_ui(self, user_idx, item_idx):
+    def calculate_DA_loss_ui(self, interaction):
         """
         only consider the user-item positive pairs (check the paper)?
         """
         # get indexes
-        user_idx = torch.unique(user_idx)
-        item_idx = torch.unique(item_idx)
-
-        # get embeddings
-        user_emb = self.user_tower(user_idx)
-        item_emb = self.item_tower(item_idx)
-
+        user_idx = torch.unique(interaction[self.USER_ID])
+        item_idx = torch.unique(interaction[self.ITEM_ID])
         # get answer
         # get the submatrix of the dist matrix (user, item) so no need to re-encoding
         # put the data_dist_matrix to device at the beginning
         dist_ans = self.data_dist_matrix[: self.n_users, self.n_users :][user_idx, :][:, item_idx]
 
-        # get prediction
+
+        # get embeddings & prediction
+        user_emb = self.get_user_embedding(user_idx)
+        item_emb = self.get_item_embedding(item_idx)
         dist_pred = torch.matmul(user_emb, item_emb.T)
+
+
         # TODO: check the torch slicing mechanism? can I do slicing like this?
         # TODO: refine this part
         if self.alpha_DA == 0:
@@ -193,22 +215,28 @@ class GeneralRecommender(AbstractRecommender):
         return DA_loss
 
     # if each loss eat idx => pass idx into tower 2 times each iteration
-    def DA_loss_anchor(self, user_idx, item_idx, all_emb, reselect_anchor=True):
+    # TODO: revise all_emb style input
+    def calculate_DA_loss_anchor(self, interaction, reselect_anchor=True):
         '''
         anchor set should be obtained epoch-wise, i.e. sample anchor set for each epoch
         all_emb: (n_users + n_items, dim) # all embeddings, concatenated user and item
         can get with self.generate(split=False)
         '''
         if reselect_anchor:
-            anchor_set_id, dist_max, dist_argmax = self.preselect_anchor(self.n_params, self.data_dist_matrix, self.device) # already on device
+            anchor_set_id, dist_max, dist_argmax = self.preselect_anchor() # already on device
             self.anchor_set_id = anchor_set_id
             self.dist_max = dist_max
             self.dist_argmax = dist_argmax
+
+        all_emb = self.generate(split=False)
         
         # it is like DA_full but only consider the anchor set
+        user_idx = interaction[self.USER_ID]
+        item_idx = interaction[self.ITEM_ID]
         item_idx_global = item_idx + self.n_users
         idx = torch.cat((user_idx, item_idx_global), dim=-1)
         idx = torch.unique(idx) # global idx
+
         used_anchor_ids = self.dist_argmax[idx].flatten() # only update those in anchor set
         all_used_ids = torch.unique(torch.cat((idx, used_anchor_ids), dim=-1))
         
@@ -233,6 +261,39 @@ class GeneralRecommender(AbstractRecommender):
         DA_loss = self.mse_loss(dot_product, dist_max)
 
         return DA_loss
+
+    @staticmethod
+    def get_random_anchorset(n, c=0.5):
+        '''
+        return a list of anchorset id
+        each anchorset id is a list of id, grow in size
+        '''
+        m = int(np.log2(n))
+        copy = int(c * m)
+        anchorset_id = []
+        for i in range(m):
+            anchor_size = int(n / np.exp2(i + 1))
+            for j in range(copy):
+                anchorset_id.append(np.random.choice(n, size=anchor_size, replace=False))
+        return anchorset_id # this is global id
+
+    @staticmethod
+    def get_dist_max(anchor_set_id, dist_matrix, device):
+        dist_max = torch.zeros((dist_matrix.shape[0], len(anchor_set_id)), device=device)
+        dist_argmax = torch.zeros((dist_matrix.shape[0], len(anchor_set_id)), device=device, dtype=torch.long)
+        for i in range(len(anchor_set_id)):
+            temp_id = torch.as_tensor(anchor_set_id[i], dtype=torch.long).to(device)
+            dist_temp = dist_matrix[:, temp_id]
+            dist_max_temp, dist_argmax_temp = torch.max(temp_id, dim=-1)
+            dist_max[:, i] = dist_max_temp
+            dist_max[:, i], dist_argmax[:, i] = torch.max(dist_matrix[:, anchor_set_id[i]], dim=1)
+            dist_argmax[:, i] = temp_id[dist_argmax[:, i]]
+        return dist_max, dist_argmax
+
+    def preselect_anchor(self): 
+        anchor_set_id = self.get_random_anchorset(self.n_users+self.n_items, c=1)
+        dist_max, dist_argmax = self.get_dist_max(anchor_set_id, self.data_dist_matrix, self.device)
+        return anchor_set_id, dist_max, dist_argmax
 
 
 class AutoEncoderMixin(object):

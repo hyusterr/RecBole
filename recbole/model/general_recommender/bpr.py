@@ -64,6 +64,15 @@ class BPR(GeneralRecommender):
         """
         return self.item_embedding(item)
 
+    def generate(self, split=False):
+        r"""Generate the embedding of all users and items."""
+        user_e = self.user_embedding.weight
+        item_e = self.item_embedding.weight
+        if split == True:
+            return user_e, item_e
+        else:
+            return torch.cat([user_e, item_e])
+
     def forward(self, user, item):
         user_e = self.get_user_embedding(user)
         item_e = self.get_item_embedding(item)

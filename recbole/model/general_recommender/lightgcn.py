@@ -196,6 +196,28 @@ class LightGCN(GeneralRecommender):
         scores = torch.mul(u_embeddings, i_embeddings).sum(dim=1)
         return scores
 
+    def get_user_embedding(self, user_id):
+        user_all_embeddings, _ = self.forward()
+        return user_all_embeddings[user_id]
+
+    def get_item_embedding(self, item_id):
+        _, item_all_embeddings = self.forward()
+        return item_all_embeddings[item_id]
+
+
+    def generate(self, split=False):
+        r"""Generate the embedding of users and items.
+
+        Args:
+            split (bool, optional): If true, will return the embeddings of users and items
+        """
+        user_all_embeddings, item_all_embeddings = self.forward()
+        if split:
+            return user_all_embeddings, item_all_embeddings
+        else:
+            return torch.cat([user_all_embeddings, item_all_embeddings], dim=0)
+
+
     def full_sort_predict(self, interaction):
         user = interaction[self.USER_ID]
         if self.restore_user_e is None or self.restore_item_e is None:

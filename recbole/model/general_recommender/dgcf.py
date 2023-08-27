@@ -385,6 +385,22 @@ class DGCF(GeneralRecommender):
         scores = torch.mul(u_embeddings, i_embeddings).sum(dim=1)
         return scores
 
+    def get_user_embedding(self, user_ids):
+        u_embedding, _ = self.forward()
+        return u_embedding[user_ids]
+
+    def get_item_embedding(self, item_ids):
+        _, i_embedding = self.forward()
+        return i_embedding[item_ids]
+
+    def generate(self, split=False):
+        user_embeddings, item_embeddings = self.forward()
+        if split:
+            return user_embeddings, item_embeddings
+        else:
+            return torch.cat((user_embeddings, item_embeddings), dim=0)
+
+
     def full_sort_predict(self, interaction):
         user = interaction[self.USER_ID]
         if self.restore_user_e is None or self.restore_item_e is None:
