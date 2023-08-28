@@ -2,6 +2,7 @@ import os
 import csv
 import json
 import time
+import torch
 import random
 import argparse
 import numpy as np
@@ -10,6 +11,12 @@ import multiprocessing as mp
 import scipy.sparse as sp
 import networkx as nx
 from tqdm import tqdm
+
+def merge_dicts(dicts):
+    result = {}
+    for dictionary in dicts:
+        result.update(dictionary)
+    return result
 
 
 def single_source_shortest_path_length_range(graph, node_range, cutoff):
@@ -56,16 +63,23 @@ def precompute_dist_data(train_data, config, approximate=0):
     train_data: recbole.data.AbstractDataLoader
     :return:
     """
-    # tau = config["tau_da"]
+    tau = config["tau_da"]
+    if tau is None:
+        tau = 1
+
+    print('tau', tau)
+
     num_nodes = train_data._dataset.item_num + train_data._dataset.user_num
     # will the train_data num info same to the original data??
-    train_df = train_data._dataset.inter_feat.interaction
-    print(num_nodes)
-    print(train_df)
-    stophere
+    train_inter = train_data._dataset.inter_feat.interaction # dictionary, 'user_id': tensor
+    user_tensor = train_inter[config['USER_ID_FIELD']]
+    item_tensor = train_inter[config['ITEM_ID_FIELD']]
 
+    edge_index = torch.stack([user_tensor, item_tensor], dim=0).t().numpy()
 
+    print(edge_index.shape)
     print(edge_index)
+
     graph = nx.Graph()
     edge_list = edge_index.tolist()  # np.array shape=(n_iteraction, 2)
     graph.add_edges_from(edge_list)
@@ -92,8 +106,16 @@ def precompute_dist_data(train_data, config, approximate=0):
             if dist != -1:
                 if tau == 0:  # -1 ~ 1
                     dists_array[node_i, node_j] = -(((dist / max_path_length) * 2) - 1)
-                elif tau > 1:  # 0 ~ 1
+                elif tau > 0:  # 0 ~ 1
                     dists_array[node_i, node_j] = 1 / (dist + tau)
+
+    print(dists_array)
+    print(config['data_path'])
+
+    save_path = os.path.join(config['data_path'], f'tau-{tau}_seed-{config["seed"]}_dist_data.npz')
+    print('dist matrix file size:', dists_array.nbytes / 1024 / 1024 / 1024, 'GB')
+    np.savez_compressed(save_path, dists_array=dists_array)
+
     return dists_array
 
 if __name__ == '__main__':
