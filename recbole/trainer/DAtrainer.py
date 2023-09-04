@@ -1,3 +1,4 @@
+import math
 from recbole.trainer import Trainer
 
 
@@ -15,15 +16,21 @@ def calculate_beta_e(beta, beta_discount_factor, epoch_idx):
 #TODO: 0. change parent class Trainer _train_epoch's return capture
 #TODO: 1. add the code to train the model with the DA method 2. add the beta discount mechanism
 #TODO: 3. deal with reselect_anchorset
-class DAtrainer(Trainer):
+class DATrainer(Trainer):
 
     def __init__(self, config, model):
-        super(DA_trainer, self).__init__(config, model)
+        super(DATrainer, self).__init__(config, model)
         self.DA_sampling = config['DA_sampling']
         self.beta_discount_factor = config['beta_discount_factor']
         self.beta = config['beta']
+        
+        # overwrite the saved_model_file
+        saved_model_file = "{}-{}-{}.pth".format(self.config["model"], self.config["DA-sampling"], get_local_time())
+        self.saved_model_file = os.path.join(self.checkpoint_dir, saved_model_file)
 
-    def _train_epoch(self, train_data, epoch_idx):
+
+
+    def _train_epoch(self, train_data, epoch_idx, loss_func=None, show_progress=False):
 
         main_loss_func = self.model.calculate_loss
         if self.DA_sampling == 'full':
