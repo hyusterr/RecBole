@@ -344,7 +344,8 @@ class Trainer(AbstractTrainer):
             raise ValueError("Training loss is nan")
 
     def _generate_train_loss_output(self, epoch_idx, s_time, e_time, losses):
-        des = self.config["loss_decimal_place"] or 4
+        # here is a bug in multiple loss logging
+        des_original = self.config["loss_decimal_place"] or 4
         train_loss_output = (
             set_color("epoch %d training", "green")
             + " ["
@@ -352,12 +353,12 @@ class Trainer(AbstractTrainer):
             + ": %.2fs, "
         ) % (epoch_idx, e_time - s_time)
         if isinstance(losses, tuple):
-            des = set_color("train_loss%d", "blue") + ": %." + str(des) + "f"
+            des = set_color("train_loss%d", "blue") + ": %." + str(des_original) + "f"
             train_loss_output += ", ".join(
                 des % (idx + 1, loss) for idx, loss in enumerate(losses)
             )
         else:
-            des = "%." + str(des) + "f"
+            des = "%." + str(des_original) + "f"
             train_loss_output += set_color("train loss", "blue") + ": " + des % losses
         return train_loss_output + "]"
 
