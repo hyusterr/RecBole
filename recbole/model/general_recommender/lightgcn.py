@@ -41,8 +41,8 @@ class LightGCN(GeneralRecommender):
     """
     input_type = InputType.PAIRWISE
 
-    def __init__(self, config, dataset):
-        super(LightGCN, self).__init__(config, dataset)
+    def __init__(self, config, dataset, da_data_matrix):
+        super(LightGCN, self).__init__(config, dataset, da_data_matrix)
 
         # load dataset info
         self.interaction_matrix = dataset.inter_matrix(form="coo").astype(np.float32)
@@ -160,6 +160,12 @@ class LightGCN(GeneralRecommender):
         neg_item = interaction[self.NEG_ITEM_ID]
 
         user_all_embeddings, item_all_embeddings = self.forward()
+        
+        # add for dagcf; renew the embeddings
+        self.get_user_embedding_da = user_all_embeddings
+        self.get_item_embedding_da = item_all_embeddings
+        self.get_all_embedding_da = torch.cat([user_all_embeddings, item_all_embeddings])
+        
         u_embeddings = user_all_embeddings[user]
         pos_embeddings = item_all_embeddings[pos_item]
         neg_embeddings = item_all_embeddings[neg_item]
@@ -196,28 +202,7 @@ class LightGCN(GeneralRecommender):
         scores = torch.mul(u_embeddings, i_embeddings).sum(dim=1)
         return scores
 
-    def get_user_embedding(self, user_id):
-        user_all_embeddings, _ = self.forward()
-        return user_all_embeddings[user_id]
-
-    def get_item_embedding(self, item_id):
-        _, item_all_embeddings = self.forward()
-        return item_all_embeddings[item_id]
-
-
-    def generate(self, split=False):
-        r"""Generate the embedding of users and items.
-
-        Args:
-            split (bool, optional): If true, will return the embeddings of users and items
-        """
-        user_all_embeddings, item_all_embeddings = self.forward()
-        if split:
-            return user_all_embeddings, item_all_embeddings
-        else:
-            return torch.cat([user_all_embeddings, item_all_embeddings], dim=0)
-
-
+    
     def full_sort_predict(self, interaction):
         user = interaction[self.USER_ID]
         if self.restore_user_e is None or self.restore_item_e is None:

@@ -1,66 +1,72 @@
 # -*- coding: utf-8 -*-
-# @Time   : 2020/7/16
-# @Author : Zihan Lin
-# @Email  : linzihan.super@foxmail.com
+# @Time   : 2020/8/31
+# @Author : Changxin Tian
+# @Email  : cx.tian@outlook.com
 
 # UPDATE:
-# @Time   : 2020/9/16
-# @Author : Shanlei Mu
-# @Email  : slmu@ruc.edu.cn
+# @Time   : 2023/10/2
+# @Author : Yu-Shiang Huang
+# @Email  : F09946004@ntu.edu.tw
 
 r"""
-NGCF
+LR-GCCF
 ################################################
+
 Reference:
-    Xiang Wang et al. "Neural Graph Collaborative Filtering." in SIGIR 2019.
+    Chen, Lei, et al. "Revisiting graph based collaborative filtering: A linear residual graph convolutional network approach." in AAAI 2020.
 
 Reference code:
-    https://github.com/xiangwang1223/neural_graph_collaborative_filtering
-
+    https://github.com/newlei/LRGCCF
 """
 
 import numpy as np
 import scipy.sparse as sp
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
 
 from recbole.model.abstract_recommender import GeneralRecommender
-from recbole.model.init import xavier_normal_initialization
-from recbole.model.layers import BiGNNLayer, SparseDropout
+from recbole.model.init import xavier_uniform_initialization
 from recbole.model.loss import BPRLoss, EmbLoss
 from recbole.utils import InputType
 
 
-class NGCF(GeneralRecommender):
-    r"""NGCF is a model that incorporate GNN for recommendation.
-    We implement the model following the original author with a pairwise training mode.
+class LRGCCF(GeneralRecommender):
+    r"""LRGCCF is a GCN-based recommender model.
+
+    remove the nonlinear acitivation and the inner product in the NGCF
+
     """
     input_type = InputType.PAIRWISE
 
     def __init__(self, config, dataset, da_data_matrix):
-        super(NGCF, self).__init__(config, dataset, da_data_matrix)
+        super(LRGCCF, self).__init__(config, dataset, da_data_matrix)
 
         # load dataset info
         self.interaction_matrix = dataset.inter_matrix(form="coo").astype(np.float32)
 
         # load parameters info
-        self.embedding_size = config["embedding_size"]
-        self.hidden_size_list = config["hidden_size_list"]
-        self.hidden_size_list = [self.embedding_size] + self.hidden_size_list
-        self.node_dropout = config["node_dropout"]
-        self.message_dropout = config["message_dropout"]
-        self.reg_weight = config["reg_weight"]
+        self.latent_dim = config[
+            "embedding_size"
+        ]  # int type:the embedding size of LRGCCF
+        self.n_layers = config["n_layers"]  # int type:the layer num of LRGCCF
+        self.reg_weight = config[
+            "reg_weight"
+        ]  # float32 type: the weight decay for l2 normalization
+        self.require_pow = config["require_pow"]
 
         # define layers and loss
-        self.sparse_dropout = SparseDropout(self.node_dropout)
-        self.user_embedding = nn.Embedding(self.n_users, self.embedding_size)
-        self.item_embedding = nn.Embedding(self.n_items, self.embedding_size)
-        self.GNNlayers = torch.nn.ModuleList()
-        for idx, (input_size, output_size) in enumerate(
-            zip(self.hidden_size_list[:-1], self.hidden_size_list[1:])
-        ):
-            self.GNNlayers.append(BiGNNLayer(input_size, output_size))
+        self.user_embedding = torch.nn.Embedding(
+            num_embeddings=self.n_users, embedding_dim=self.latent_dim
+        )
+        self.item_embedding = torch.nn.Embedding(
+            num_embeddings=self.n_items, embedding_dim=self.latent_dim
+        )
+        self.Wlayers = torch.nn.ModuleList()
+        for layer_idx in range(self.n_layers):
+            self.Wlayers.append(
+                torch.nn.Linear(self.latent_dim, self.latent_dim, bias=False)
+                # not use bias in the linear layer
+            )
+
         self.mf_loss = BPRLoss()
         self.reg_loss = EmbLoss()
 
@@ -70,10 +76,9 @@ class NGCF(GeneralRecommender):
 
         # generate intermediate data
         self.norm_adj_matrix = self.get_norm_adj_mat().to(self.device)
-        self.eye_matrix = self.get_eye_mat().to(self.device)
 
         # parameters initialization
-        self.apply(xavier_normal_initialization)
+        self.apply(xavier_uniform_initialization)
         self.other_parameter_name = ["restore_user_e", "restore_item_e"]
 
     def get_norm_adj_mat(self):
@@ -81,9 +86,12 @@ class NGCF(GeneralRecommender):
 
         Construct the square matrix from the training data and normalize it
         using the laplace matrix.
-
+        (notation follows the AAAI2020 paper)
+        the LRGCCF consider self connection, so the norm_adj_matrix is
         .. math::
-            A_{hat} = D^{-0.5} \times A \times D^{-0.5}
+            \tilde{A} = A + I
+            \tilde{D} = \sum_{j=1}^{N} \tilde{A}_{ij} # degree matrix of \tilde{A}
+            S = \tilde{D}^{-0.5} \times \tilde{A} \times \tilde{D}^{-0.5}
 
         Returns:
             Sparse tensor of the normalized interaction matrix.
@@ -106,39 +114,29 @@ class NGCF(GeneralRecommender):
             )
         )
         A._update(data_dict)
+        A_tilde = A + sp.eye(A.shape[0])
+
         # norm adj matrix
-        sumArr = (A > 0).sum(axis=1)
-        diag = (
-            np.array(sumArr.flatten())[0] + 1e-7
-        )  # add epsilon to avoid divide by zero Warning
-        diag = np.power(diag, -0.5)
-        D = sp.diags(diag)
-        L = D * A * D
+        sumArr = (A_tilde > 0).sum(axis=1)
+        # add epsilon to avoid divide by zero Warning
+        diag_tilde = np.array(sumArr.flatten())[0] + 1e-7
+        diag_tilde = np.power(diag_tilde, -0.5)
+        D = sp.diags(diag_tilde) # actually D is D_tilde^-0.5
+        S = D * A_tilde * D
         # covert norm_adj matrix to tensor
-        L = sp.coo_matrix(L)
-        row = L.row
-        col = L.col
+        S = sp.coo_matrix(S)
+        row = S.row
+        col = S.col
         i = torch.LongTensor(np.array([row, col]))
-        data = torch.FloatTensor(L.data)
-        SparseL = torch.sparse.FloatTensor(i, data, torch.Size(L.shape))
-        return SparseL
-
-    def get_eye_mat(self):
-        r"""Construct the identity matrix with the size of  n_items+n_users.
-
-        Returns:
-            Sparse tensor of the identity matrix. Shape of (n_items+n_users, n_items+n_users)
-        """
-        num = self.n_items + self.n_users  # number of column of the square matrix
-        i = torch.LongTensor([range(0, num), range(0, num)])
-        val = torch.FloatTensor([1] * num)  # identity matrix
-        return torch.sparse.FloatTensor(i, val)
+        data = torch.FloatTensor(S.data)
+        SparseS = torch.sparse.FloatTensor(i, data, torch.Size(S.shape))
+        return SparseS
 
     def get_ego_embeddings(self):
         r"""Get the embedding of users and items and combine to an embedding matrix.
 
         Returns:
-            Tensor of the embedding matrix. Shape of (n_items+n_users, embedding_dim)
+            Tensor of the embedding matrix. Shape of [n_items+n_users, embedding_dim]
         """
         user_embeddings = self.user_embedding.weight
         item_embeddings = self.item_embedding.weight
@@ -146,27 +144,18 @@ class NGCF(GeneralRecommender):
         return ego_embeddings
 
     def forward(self):
-        A_hat = (
-            self.sparse_dropout(self.norm_adj_matrix)
-            if self.node_dropout != 0
-            else self.norm_adj_matrix
-        )
         all_embeddings = self.get_ego_embeddings()
         embeddings_list = [all_embeddings]
-        for gnn in self.GNNlayers:
-            all_embeddings = gnn(A_hat, self.eye_matrix, all_embeddings)
-            all_embeddings = nn.LeakyReLU(negative_slope=0.2)(all_embeddings)
-            all_embeddings = nn.Dropout(self.message_dropout)(all_embeddings)
-            all_embeddings = F.normalize(all_embeddings, p=2, dim=1)
-            embeddings_list += [
-                all_embeddings
-            ]  # storage output embedding of each layer
-        ngcf_all_embeddings = torch.cat(embeddings_list, dim=1)
+
+        for linear_layer in self.Wlayers:
+            all_embeddings = torch.sparse.mm(self.norm_adj_matrix, all_embeddings)
+            all_embeddings = linear_layer(all_embeddings)
+            embeddings_list.append(all_embeddings)
+        lrgccf_all_embeddings = torch.cat(embeddings_list, dim=1)
 
         user_all_embeddings, item_all_embeddings = torch.split(
-            ngcf_all_embeddings, [self.n_users, self.n_items]
+            lrgccf_all_embeddings, [self.n_users, self.n_items]
         )
-
         return user_all_embeddings, item_all_embeddings
 
     def calculate_loss(self, interaction):
@@ -179,25 +168,36 @@ class NGCF(GeneralRecommender):
         neg_item = interaction[self.NEG_ITEM_ID]
 
         user_all_embeddings, item_all_embeddings = self.forward()
+        
         # add for dagcf; renew the embeddings
         self.get_user_embedding_da = user_all_embeddings
         self.get_item_embedding_da = item_all_embeddings
         self.get_all_embedding_da = torch.cat([user_all_embeddings, item_all_embeddings])
         
-
         u_embeddings = user_all_embeddings[user]
         pos_embeddings = item_all_embeddings[pos_item]
         neg_embeddings = item_all_embeddings[neg_item]
 
+        # calculate BPR Loss
         pos_scores = torch.mul(u_embeddings, pos_embeddings).sum(dim=1)
         neg_scores = torch.mul(u_embeddings, neg_embeddings).sum(dim=1)
-        mf_loss = self.mf_loss(pos_scores, neg_scores)  # calculate BPR Loss
+        mf_loss = self.mf_loss(pos_scores, neg_scores)
+
+        # calculate BPR Loss
+        u_ego_embeddings = self.user_embedding(user)
+        pos_ego_embeddings = self.item_embedding(pos_item)
+        neg_ego_embeddings = self.item_embedding(neg_item)
 
         reg_loss = self.reg_loss(
-            u_embeddings, pos_embeddings, neg_embeddings
-        )  # L2 regularization of embeddings
+            u_ego_embeddings,
+            pos_ego_embeddings,
+            neg_ego_embeddings,
+            require_pow=self.require_pow,
+        )
 
-        return mf_loss + self.reg_weight * reg_loss
+        loss = mf_loss + self.reg_weight * reg_loss
+
+        return loss
 
     def predict(self, interaction):
         user = interaction[self.USER_ID]
@@ -210,6 +210,7 @@ class NGCF(GeneralRecommender):
         scores = torch.mul(u_embeddings, i_embeddings).sum(dim=1)
         return scores
 
+    
     def full_sort_predict(self, interaction):
         user = interaction[self.USER_ID]
         if self.restore_user_e is None or self.restore_item_e is None:

@@ -61,8 +61,8 @@ class DGCF(GeneralRecommender):
     """
     input_type = InputType.PAIRWISE
 
-    def __init__(self, config, dataset):
-        super(DGCF, self).__init__(config, dataset)
+    def __init__(self, config, dataset, da_data_matrix):
+        super(DGCF, self).__init__(config, dataset, da_data_matrix)
 
         # load dataset info
         self.interaction_matrix = dataset.inter_matrix(form="coo").astype(np.float32)
@@ -87,7 +87,9 @@ class DGCF(GeneralRecommender):
         all_t_list = col + row  # col.extend(row)
         num_edge = len(all_h_list)
         edge_ids = range(num_edge)
+        print("model device:", self.device)
         self.all_h_list = torch.LongTensor(all_h_list).to(self.device)
+
         self.all_t_list = torch.LongTensor(all_t_list).to(self.device)
         self.edge2head = torch.LongTensor([all_h_list, edge_ids]).to(self.device)
         self.head2edge = torch.LongTensor([edge_ids, all_h_list]).to(self.device)
@@ -264,6 +266,13 @@ class DGCF(GeneralRecommender):
         neg_item = interaction[self.NEG_ITEM_ID]
 
         user_all_embeddings, item_all_embeddings = self.forward()
+        
+        # add for dagcf; renew the embeddings
+        self.get_user_embedding_da = user_all_embeddings
+        self.get_item_embedding_da = item_all_embeddings
+        self.get_all_embedding_da = torch.cat([user_all_embeddings, item_all_embeddings])
+        
+
         u_embeddings = user_all_embeddings[user]
         pos_embeddings = item_all_embeddings[pos_item]
         neg_embeddings = item_all_embeddings[neg_item]
@@ -384,21 +393,6 @@ class DGCF(GeneralRecommender):
         i_embeddings = i_embedding[item]
         scores = torch.mul(u_embeddings, i_embeddings).sum(dim=1)
         return scores
-
-    def get_user_embedding(self, user_ids):
-        u_embedding, _ = self.forward()
-        return u_embedding[user_ids]
-
-    def get_item_embedding(self, item_ids):
-        _, i_embedding = self.forward()
-        return i_embedding[item_ids]
-
-    def generate(self, split=False):
-        user_embeddings, item_embeddings = self.forward()
-        if split:
-            return user_embeddings, item_embeddings
-        else:
-            return torch.cat((user_embeddings, item_embeddings), dim=0)
 
 
     def full_sort_predict(self, interaction):

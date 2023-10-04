@@ -28,8 +28,8 @@ class BPR(GeneralRecommender):
     r"""BPR is a basic matrix factorization model that be trained in the pairwise way."""
     input_type = InputType.PAIRWISE
 
-    def __init__(self, config, dataset):
-        super(BPR, self).__init__(config, dataset)
+    def __init__(self, config, dataset, da_data_matrix):
+        super(BPR, self).__init__(config, dataset, da_data_matrix)
 
         # load parameters info
         self.embedding_size = config["embedding_size"]
@@ -85,6 +85,12 @@ class BPR(GeneralRecommender):
 
         user_e, pos_e = self.forward(user, pos_item)
         neg_e = self.get_item_embedding(neg_item)
+        
+        # for dagcf
+        self.get_user_embedding_da = self.user_embedding.weight
+        self.get_item_embedding_da = self.item_embedding.weight
+        self.get_all_embedding_da = torch.cat([self.get_user_embedding_da, self.get_item_embedding_da])
+
         pos_item_score, neg_item_score = torch.mul(user_e, pos_e).sum(dim=1), torch.mul(
             user_e, neg_e
         ).sum(dim=1)

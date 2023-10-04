@@ -37,8 +37,8 @@ class SGL(GeneralRecommender):
     """
     input_type = InputType.PAIRWISE
 
-    def __init__(self, config, dataset):
-        super(SGL, self).__init__(config, dataset)
+    def __init__(self, config, dataset, da_data_matrix):
+        super(SGL, self).__init__(config, dataset, da_data_matrix)
         self._user = dataset.inter_feat[dataset.uid_field]
         self._item = dataset.inter_feat[dataset.iid_field]
         self.embed_dim = config["embedding_size"]
@@ -207,6 +207,13 @@ class SGL(GeneralRecommender):
         pos_item_list = interaction[self.ITEM_ID]
         neg_item_list = interaction[self.NEG_ITEM_ID]
         user_emd, item_emd = self.forward(self.train_graph)
+
+        # add for dagcf; renew the embeddings
+        self.get_user_embedding_da = user_emd
+        self.get_item_embedding_da = item_emd
+        self.get_all_embedding_da = torch.cat([user_emd, item_emd], dim=0)
+        
+
         user_sub1, item_sub1 = self.forward(self.sub_graph1)
         user_sub2, item_sub2 = self.forward(self.sub_graph2)
         total_loss = self.calc_bpr_loss(

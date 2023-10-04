@@ -35,7 +35,8 @@ class WandbLogger(object):
 
             # Initialize a W&B run
             if self._wandb.run is None:
-                self._wandb.init(project=self.config.wandb_project, config=self.config)
+                name = self.config['model'] + '_' + self.config['DA_sampling'] + '_' + self.config['dataset'] + "_tau_da" + str(self.config['tau_da'])
+                self._wandb.init(project=self.config.wandb_project, config=self.config, name=name)
 
             self._set_steps()
 

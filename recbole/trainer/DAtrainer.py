@@ -1,6 +1,10 @@
+import os
 import math
+import torch
+from time import time
 from recbole.trainer import Trainer
-
+from recbole.utils import *
+from tqdm import tqdm
 
 # TODO: the beta from paper seems like always 1? need check
 def calculate_beta_e(beta, beta_discount_factor, epoch_idx):
@@ -25,13 +29,15 @@ class DATrainer(Trainer):
         self.beta = config['beta']
         
         # overwrite the saved_model_file
-        saved_model_file = "{}-{}-{}.pth".format(self.config["model"], self.config["DA-sampling"], get_local_time())
+        saved_model_file = "{}-{}-{}.pth".format(self.config["model"], self.config["DA_sampling"], get_local_time())
         self.saved_model_file = os.path.join(self.checkpoint_dir, saved_model_file)
 
 
 
     def _train_epoch(self, train_data, epoch_idx, loss_func=None, show_progress=False):
 
+        self.model.train()
+ 
         main_loss_func = self.model.calculate_loss
         if self.DA_sampling == 'full':
             da_loss_func = self.model.calculate_loss_DA_full
@@ -42,21 +48,35 @@ class DATrainer(Trainer):
         elif self.DA_sampling == 'none':
             da_loss_func = None
         
-        self.model.train()
         total_loss = 0.
         main_loss = 0.
         da_loss = 0.
         
         beta_e = calculate_beta_e(self.beta, self.beta_discount_factor, epoch_idx)
+        
+        iter_data = (
+            tqdm(
+                train_data,
+                total=len(train_data),
+                ncols=100,
+                desc=set_color(f"Train {epoch_idx:>5}", "pink"),
+            )
+            if show_progress
+            else train_data
+        )
 
-        for batch_idx, interaction in enumerate(train_data):
+        for batch_idx, interaction in enumerate(iter_data):
             interaction = interaction.to(self.device)
             self.optimizer.zero_grad()
             main_loss_value = main_loss_func(interaction)
-            if da_loss is not None:
+            
+            # need to reselect anchorset for the first batch when using anchor sampling
+            if self.DA_sampling == 'anchor' and batch_idx == 0:
+                da_loss_value = da_loss_func(interaction, reselect_anchor=True)  
+            elif da_loss_func is not None:
                 da_loss_value = da_loss_func(interaction)
             else:
-                da_loss_value = 0
+                da_loss_value = torch.tensor(0.0)
 
             loss = main_loss_value + beta_e * da_loss_value
             loss.backward()
@@ -117,7 +137,7 @@ class DATrainer(Trainer):
             )
             if verbose:
                 self.logger.info(train_loss_output)
-            self._add_train_loss_to_tensorboard(epoch_idx, train_loss)
+            self._add_train_loss_to_tensorboard(epoch_idx, (train_loss, main_loss, da_loss, beta_e))
             self.wandblogger.log_metrics(
                 {
                     "epoch": epoch_idx, 

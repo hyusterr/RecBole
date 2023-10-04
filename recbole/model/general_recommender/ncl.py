@@ -25,8 +25,8 @@ class NCL(GeneralRecommender):
     """
     input_type = InputType.PAIRWISE
 
-    def __init__(self, config, dataset):
-        super(NCL, self).__init__(config, dataset)
+    def __init__(self, config, dataset, da_data_matrix):
+        super(NCL, self).__init__(config, dataset, da_data_matrix)
 
         # load dataset info
         self.interaction_matrix = dataset.inter_matrix(form="coo").astype(np.float32)
@@ -265,6 +265,13 @@ class NCL(GeneralRecommender):
         u_embeddings = user_all_embeddings[user]
         pos_embeddings = item_all_embeddings[pos_item]
         neg_embeddings = item_all_embeddings[neg_item]
+
+        
+        # add for dagcf; renew the embeddings
+        self.get_user_embedding_da = user_all_embeddings
+        self.get_item_embedding_da = item_all_embeddings
+        self.get_all_embedding_da = torch.cat([user_all_embeddings, item_all_embeddings])
+        
 
         # calculate BPR Loss
         pos_scores = torch.mul(u_embeddings, pos_embeddings).sum(dim=1)

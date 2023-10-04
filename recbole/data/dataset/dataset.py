@@ -39,6 +39,9 @@ from recbole.utils.url import (
     makedirs,
     rename_atomic_files,
 )
+# torch.distributed.init_process_group(backend="nccl",rank = torch.cuda.device_count(), world_size=1)
+# os.environ['MASTER_ADDR'] = 'localhost'
+# os.environ['MASTER_PORT'] = '12355'
 
 
 class Dataset(torch.utils.data.Dataset):
@@ -263,6 +266,7 @@ class Dataset(torch.utils.data.Dataset):
             token (str): dataset name.
             dataset_path (str): path of dataset dir.
         """
+        print(dataset_path)
         if not os.path.exists(dataset_path):
             self._download()
         self._load_inter_feat(token, dataset_path)

@@ -56,7 +56,7 @@ def all_pairs_shortest_path_length_parallel(graph, cutoff=None, num_workers=16):
     pool.join()
     return dists_dict
 
-def precompute_dist_data(train_data, config, approximate=0):
+def prepare_DA_data_matrix(train_data, config, approximate=0):
     """
     Here dist is 1/real_dist, higher actually means closer, 0 means disconnected
     it is the NSPD in the paper
@@ -125,4 +125,4 @@ if __name__ == '__main__':
     config = Config(model='BPR', dataset='ml-100k')
     dataset = create_dataset(config)
     train_data, valid_data, test_data = data_preparation(config, dataset)
-    precompute_dist_data(train_data, config, approximate=0)
+    prepare_DA_data_matrix(train_data, config, approximate=0)

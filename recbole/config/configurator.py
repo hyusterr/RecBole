@@ -490,8 +490,9 @@ class Config(object):
             self.final_config_dict["device"] = (
                 torch.device("cpu")
                 if len(gpu_id) == 0 or not torch.cuda.is_available()
-                else torch.device("cuda")
+                else torch.device(f"cuda")
             )
+            print('successfully set device')
         else:
             assert len(gpu_id.split(",")) >= self.final_config_dict["nproc"]
             torch.distributed.init_process_group(
