@@ -46,7 +46,6 @@ class BSPM(GeneralRecommender):
         self.adj_mat = self.interaction_matrix.tolil()
 
 
-
         # load parameters info
         self.config = config
         self.idl_solver = self.config['solver_idl']
@@ -88,9 +87,13 @@ class BSPM(GeneralRecommender):
         print("final_sharpening: ",self.final_sharpening)
         print("sharpening off: ",self.sharpening_off)
         print("t_point_combination: ",self.t_point_combination)
+
+        self.fake_loss = torch.nn.Parameter(torch.zeros(1))
+
+        self._train()
         
         
-    def train(self):
+    def _train(self):
         adj_mat = self.adj_mat # a lil format
         start = time.time()
         rowsum = np.array(adj_mat.sum(axis=1))
@@ -131,7 +134,7 @@ class BSPM(GeneralRecommender):
 
     # TODO: RecBole seems to default put everything on gpu, this may need to adjust 
     def full_sort_predict(self, interaction):
-        batch_users = interaction[self.USER_ID]
+        batch_users = interaction[self.USER_ID].cpu().numpy()
         adj_mat = self.adj_mat
         batch_test = np.array(adj_mat[batch_users,:].todense())
 
@@ -164,7 +167,9 @@ class BSPM(GeneralRecommender):
                 ret = U_2.numpy() + self.idl_beta * idl_out[-1].numpy()
         else:
             ret = U_2.numpy() + self.idl_beta * idl_out[-1].numpy()
-        return ret
+
+
+        return torch.from_numpy(ret).to(self.device)
 
     def predict(self, interaction):
         user = interaction[self.USER_ID]
@@ -177,9 +182,9 @@ class BSPM(GeneralRecommender):
             uid = user[index]
             iid = item[index]
             # TODO: this is inefficient, can we do batch predict?
-            score = self.full_sort_predict([uid])[0][iid]
+            score = self.full_sort_predict(interaction)[index][iid]
             result.append(score)
-        result = torch.from_numpy(np.array(result)).to(self.device)
+        # result = torch.from_numpy(np.array(result)).to(self.device)
         # TODO: recbole default put everything on gpu, this may need to adjust
         return result
 
