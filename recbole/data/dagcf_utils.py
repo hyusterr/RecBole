@@ -74,6 +74,7 @@ def prepare_DA_data_matrix(train_data, config, approximate=0):
     train_inter = train_data._dataset.inter_feat.interaction # dictionary, 'user_id': tensor
     user_tensor = train_inter[config['USER_ID_FIELD']]
     item_tensor = train_inter[config['ITEM_ID_FIELD']]
+    item_tensor = item_tensor + train_data._dataset.user_num
 
     edge_index = torch.stack([user_tensor, item_tensor], dim=0).t().numpy()
 

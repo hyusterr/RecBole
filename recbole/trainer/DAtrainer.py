@@ -23,14 +23,28 @@ def calculate_beta_e(beta, beta_discount_factor, epoch_idx):
 class DATrainer(Trainer):
 
     def __init__(self, config, model):
+        
+        # special design for SGL and Direct, since the loss scale varies too big
+        if config['model'] == 'SGL': # main loss is at the scale of 1e5
+            config['beta'] *= 1000
+        if config['model'] == 'DirectAU': # main loss is at the scale of 1e4
+            config['beta'] *= 10
+
         super(DATrainer, self).__init__(config, model)
         self.DA_sampling = config['DA_sampling']
         self.beta_discount_factor = config['beta_discount_factor']
         self.beta = config['beta']
         
         # overwrite the saved_model_file
-        saved_model_file = "{}-{}-{}.pth".format(self.config["model"], self.config["DA_sampling"], get_local_time())
+        saved_model_file = "{}-{}-{}-{}.pth".format(self.config['dataset'], self.config["model"], self.config["DA_sampling"], get_local_time())
         self.saved_model_file = os.path.join(self.checkpoint_dir, saved_model_file)
+
+        # if is using NCL
+        self.is_NCL = False
+        if config['model'] == 'NCL':
+            self.num_m_step = config["m_step"]
+            self.is_NCL = True
+            assert self.num_m_step is not None
 
 
 
@@ -68,7 +82,10 @@ class DATrainer(Trainer):
         for batch_idx, interaction in enumerate(iter_data):
             interaction = interaction.to(self.device)
             self.optimizer.zero_grad()
-            main_loss_value = main_loss_func(interaction)
+            main_loss_value, reg_loss_with_weight = main_loss_func(interaction)
+
+            if isinstance(main_loss_value, tuple):
+                main_loss_value = sum(main_loss_value)
             
             # need to reselect anchorset for the first batch when using anchor sampling
             if self.DA_sampling == 'anchor' and batch_idx == 0:
@@ -78,7 +95,7 @@ class DATrainer(Trainer):
             else:
                 da_loss_value = torch.tensor(0.0)
 
-            loss = main_loss_value + beta_e * da_loss_value
+            loss = beta_e * main_loss_value + (1 - beta_e) * da_loss_value + reg_loss_with_weight
             loss.backward()
             self.optimizer.step()
             total_loss += loss.item()
@@ -116,11 +133,18 @@ class DATrainer(Trainer):
             self._save_checkpoint(-1, verbose=verbose)
 
         self.eval_collector.data_collect(train_data)
+        
         if self.config["train_neg_sample_args"].get("dynamic", False):
             train_data.get_model(self.model)
         valid_step = 0
 
         for epoch_idx in range(self.start_epoch, self.epochs):
+
+            # if is using NCL
+            if self.is_NCL and epoch_idx % self.num_m_step == 0:
+                self.logger.info("Running E-step ! ")
+                self.model.e_step()
+
             # train
             training_start_time = time()
             # modify here to capture main_loss, da_loss, beta_e

@@ -47,7 +47,8 @@ class LRGCCF(GeneralRecommender):
         self.latent_dim = config[
             "embedding_size"
         ]  # int type:the embedding size of LRGCCF
-        self.n_layers = config["n_layers"]  # int type:the layer num of LRGCCF
+        self.n_layers = config["n_layers"]
+        # int type:the layer num of LRGCCF
         self.reg_weight = config[
             "reg_weight"
         ]  # float32 type: the weight decay for l2 normalization

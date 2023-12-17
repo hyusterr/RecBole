@@ -7,6 +7,7 @@ r"""
 recbole.utils.wandblogger
 ################################
 """
+from recbole.utils import get_local_time
 
 
 class WandbLogger(object):
@@ -35,7 +36,7 @@ class WandbLogger(object):
 
             # Initialize a W&B run
             if self._wandb.run is None:
-                name = self.config['model'] + '_' + self.config['DA_sampling'] + '_' + self.config['dataset'] + "_tau_da" + str(self.config['tau_da'])
+                name = self.config['model'] + '_' + self.config['DA_sampling'] + '_' + self.config['dataset'] + "_tau_da" + str(self.config['tau_da']) + '_' + get_local_time()
                 self._wandb.init(project=self.config.wandb_project, config=self.config, name=name)
 
             self._set_steps()
