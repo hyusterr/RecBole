@@ -196,9 +196,7 @@ class LRGCCF(GeneralRecommender):
             require_pow=self.require_pow,
         )
 
-        loss = mf_loss + self.reg_weight * reg_loss
-
-        return loss
+        return mf_loss, self.reg_weight * reg_loss
 
     def predict(self, interaction):
         user = interaction[self.USER_ID]

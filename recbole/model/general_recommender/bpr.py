@@ -20,7 +20,7 @@ import torch.nn as nn
 
 from recbole.model.abstract_recommender import GeneralRecommender
 from recbole.model.init import xavier_normal_initialization
-from recbole.model.loss import BPRLoss
+from recbole.model.loss import BPRLoss, EmbLoss
 from recbole.utils import InputType
 
 
@@ -33,11 +33,14 @@ class BPR(GeneralRecommender):
 
         # load parameters info
         self.embedding_size = config["embedding_size"]
+        self.reg_weight = config["reg_weight"]
+        self.require_pow = config["require_pow"]
 
         # define layers and loss
         self.user_embedding = nn.Embedding(self.n_users, self.embedding_size)
         self.item_embedding = nn.Embedding(self.n_items, self.embedding_size)
         self.loss = BPRLoss()
+        self.reg_loss = EmbLoss()
 
         # parameters initialization
         self.apply(xavier_normal_initialization)
@@ -94,8 +97,10 @@ class BPR(GeneralRecommender):
         pos_item_score, neg_item_score = torch.mul(user_e, pos_e).sum(dim=1), torch.mul(
             user_e, neg_e
         ).sum(dim=1)
-        loss = self.loss(pos_item_score, neg_item_score)
-        return loss
+        bpr_loss = self.loss(pos_item_score, neg_item_score)
+        reg_loss = self.reg_loss(user_e, pos_e, neg_e, require_pow=self.require_pow)
+
+        return bpr_loss, self.reg_weight * reg_loss
 
     def predict(self, interaction):
         user = interaction[self.USER_ID]

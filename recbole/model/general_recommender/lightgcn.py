@@ -188,9 +188,9 @@ class LightGCN(GeneralRecommender):
         )
 
         loss = mf_loss 
-        reg_loss = self.reg_weight * reg_loss
+        reg_loss_with_weight = self.reg_weight * reg_loss
 
-        return loss, reg_loss
+        return loss, reg_loss_with_weight
 
     def predict(self, interaction):
         user = interaction[self.USER_ID]
