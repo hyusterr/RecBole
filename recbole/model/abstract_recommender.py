@@ -113,6 +113,7 @@ class GeneralRecommender(AbstractRecommender):
 
         # load parameters info
         self.device = config["device"]
+        print("device", torch.cuda.get_device_name(self.device))
 
 
         """
@@ -213,55 +214,82 @@ class GeneralRecommender(AbstractRecommender):
         all_emb: (n_users + n_items, dim) # all embeddings, concatenated user and item
         can get with self.generate(split=False)
         '''
-        # already on device
-        if reselect_anchor:
-            anchor_set_id, dist_max, dist_argmax = self.preselect_anchor() # already on device
-            self.anchor_set_id = anchor_set_id
-            self.dist_max = dist_max
-            self.dist_argmax = dist_argmax
+        # this is very slow
+        if reselect_anchor: # reselect anchor at every epoch
+            anchor_set_id, dist_max, dist_argmax = self.preselect_anchor() # on cpu
+            self.anchor_set_id = anchor_set_id # on cpu
+            self.dist_max = dist_max # on cpu
+            self.dist_argmax = dist_argmax # on cpu
+        # print('device of dist_argmax:', self.dist_argmax.device)
+        # print('shape of dist_argmax:', self.dist_argmax.shape)
+        # print('shape of dist_max:', self.dist_max.shape)
 
-        all_emb = self.get_all_embedding_da
+        all_emb = self.get_all_embedding_da # in device
+        # print('device of all_emb:', all_emb.device)
         
         # it is like DA_full but only consider the anchor set
-        user_idx = interaction[self.USER_ID]
+        user_idx = interaction[self.USER_ID] 
         item_idx = interaction[self.ITEM_ID]
-        item_idx_global = item_idx + self.n_users
+        item_idx_global = item_idx + self.n_users 
         idx = torch.cat((user_idx, item_idx_global), dim=-1)
-        idx = torch.unique(idx) # global idx
+        idx = torch.unique(idx) # global idx # in device
+        idx_cpu = idx.cpu() # in cpu
 
-        used_anchor_ids = self.dist_argmax[idx].flatten() # only update those in anchor set
+        # dist_argmx is a matrix of (n_nodes, log n_nodes)
+        # get those anchor id for used nodes in this batch
+        # get used id's corresponding anchor ids 
+        used_anchor_ids = self.dist_argmax[idx_cpu].flatten().to(self.device)
+        # flatten --> batch_size * N_anchor
+        # dist_argmax.shape = (n_nodes, log n_nodes)
+        # print('dist_argmax[idx_cpu].shape:', self.dist_argmax[idx_cpu].shape)
+        # print('used_anchor_ids.shape:', used_anchor_ids.shape)
+        # only update those in anchor set
         all_used_ids = torch.unique(torch.cat((idx, used_anchor_ids), dim=-1))
-        
-
+        # print("number of used ids:", len(all_used_ids))
+         
+        # feature = all_emb
+        # dist_max.shape = (n_nodes, log n_nodes)
+        # idx are the used ids in this batch --> reshape to match the 
+        # dist_max.shape[1] = # of anchor set
         reshape_feature = (
             all_emb[idx, :].unsqueeze(1).expand(-1, self.dist_max.shape[1], -1)
-        )
+        ) # reshape to match the number of used_anchor_ids
+        # reshape_feature = all_emb[idx]
+        # print("reshape_feature.shape:", reshape_feature.shape)
 
-        subset_features = all_emb[self.dist_argmax.flatten(), :]
+        # print("self.dist_argmax.flatten().shape:", self.dist_argmax.flatten().shape)
+        
+        # here will caus OOM error # maybe we don't need to take that much embeddings?
+        # old implementation: take all self.dist_argmax.flatten to caculate
+        # change: only used anchor ids corresponding to used ids in this batch
+        subset_features = all_emb[used_anchor_ids, :] # get the embeddings of argmax id of each used id in this batch # shape
+        # print("subset_features.shape before view:", subset_features.shape)
         subset_features = subset_features.view(
-            (self.dist_argmax.shape[0], self.dist_argmax.shape[1], all_emb.shape[1])
+            (reshape_feature.shape[0], self.dist_argmax.shape[1], all_emb.shape[1])
         )
-        subset_features = subset_features[idx, :, :]
+        # print("subset_features.shape after view:", subset_features.shape)
+        # subset_features = subset_features[idx, :, :]
         dot_product = torch.einsum("bij,bij->bi", reshape_feature, subset_features)
+        # dot_product = torch.matmul(reshape_feature, subset_features.T)
 
         if self.alpha_DA == 0:  # normalize to -1 and 1 so tanh
             dot_product = torch.tanh(dot_product)
         elif self.alpha_DA == 1:  # normalize to 0 and 1 so sigmoid
             dot_product = torch.sigmoid(dot_product)
 
-        dist_max = self.dist_max[idx, :]
+        # target is to take loss between dot product of anchorset and 
+        dist_max = self.dist_max[idx_cpu, :].to(self.device) # get the answer
         DA_loss = self.mse_loss(dot_product, dist_max)
-
         return DA_loss
 
     @staticmethod
-    def get_random_anchorset(n, c=0.5):
+    def get_random_anchorset(n, c=1):
         '''
         return a list of anchorset id
         each anchorset id is a list of id, grow in size
         '''
-        m = int(np.log2(n))
-        copy = int(c * m)
+        m = int(np.log2(n)) # log n anchorset in total
+        copy = int(c * m) 
         anchorset_id = []
         for i in range(m):
             anchor_size = int(n / np.exp2(i + 1))
@@ -270,7 +298,7 @@ class GeneralRecommender(AbstractRecommender):
         return anchorset_id # this is global id
 
     @staticmethod
-    def get_dist_max(anchor_set_id, dist_matrix, device):
+    def get_dist_max(anchor_set_id, dist_matrix): #, device):
         dist_max = torch.zeros((dist_matrix.shape[0], len(anchor_set_id)))
         dist_argmax = torch.zeros((dist_matrix.shape[0], len(anchor_set_id)), dtype=torch.long)
         for i in range(len(anchor_set_id)):
@@ -280,11 +308,12 @@ class GeneralRecommender(AbstractRecommender):
             dist_max[:, i] = dist_max_temp
             dist_max[:, i], dist_argmax[:, i] = torch.max(dist_matrix[:, anchor_set_id[i]], dim=1)
             dist_argmax[:, i] = temp_id[dist_argmax[:, i]]
-        return dist_max.to(device), dist_argmax.to(device)
+        return dist_max, dist_argmax #.to(device)
 
     def preselect_anchor(self): 
         anchor_set_id = self.get_random_anchorset(self.n_users+self.n_items, c=1)
-        dist_max, dist_argmax = self.get_dist_max(anchor_set_id, self.data_dist_matrix, self.device)
+        print('anchor_set_id shape:', len(anchor_set_id), [len(a) for a in anchor_set_id])
+        dist_max, dist_argmax = self.get_dist_max(anchor_set_id, self.data_dist_matrix)
         return anchor_set_id, dist_max, dist_argmax
 
 
