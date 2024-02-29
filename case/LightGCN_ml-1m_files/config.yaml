@@ -1,0 +1,681 @@
+wandb_version: 1
+
+parameters:
+  desc: null
+  value:
+    General:
+    - gpu_id
+    - use_gpu
+    - seed
+    - reproducibility
+    - state
+    - data_path
+    - checkpoint_dir
+    - show_progress
+    - config_file
+    - save_dataset
+    - dataset_save_path
+    - save_dataloaders
+    - dataloaders_save_path
+    - log_wandb
+    Training:
+    - epochs
+    - train_batch_size
+    - learner
+    - learning_rate
+    - train_neg_sample_args
+    - eval_step
+    - stopping_step
+    - clip_grad_norm
+    - weight_decay
+    - loss_decimal_place
+    Evaluation:
+    - eval_args
+    - repeatable
+    - metrics
+    - topk
+    - valid_metric
+    - valid_metric_bigger
+    - eval_batch_size
+    - metric_decimal_place
+    Dataset:
+    - field_separator
+    - seq_separator
+    - USER_ID_FIELD
+    - ITEM_ID_FIELD
+    - RATING_FIELD
+    - TIME_FIELD
+    - seq_len
+    - LABEL_FIELD
+    - threshold
+    - NEG_PREFIX
+    - ITEM_LIST_LENGTH_FIELD
+    - LIST_SUFFIX
+    - MAX_ITEM_LIST_LENGTH
+    - POSITION_FIELD
+    - HEAD_ENTITY_ID_FIELD
+    - TAIL_ENTITY_ID_FIELD
+    - RELATION_ID_FIELD
+    - ENTITY_ID_FIELD
+    - load_col
+    - unload_col
+    - unused_col
+    - additional_feat_suffix
+    - rm_dup_inter
+    - val_interval
+    - filter_inter_by_user_or_item
+    - user_inter_num_interval
+    - item_inter_num_interval
+    - alias_of_user_id
+    - alias_of_item_id
+    - alias_of_entity_id
+    - alias_of_relation_id
+    - preload_weight
+    - normalize_field
+    - normalize_all
+    - benchmark_filename
+yaml_loader:
+  desc: null
+  value: yaml.loader.FullLoader
+file_config_dict:
+  desc: null
+  value:
+    train_neg_sample_args:
+      distribution: uniform
+      sample_num: 1
+      alpha: 1.0
+      dynamic: false
+      candidate_num: 0
+    eval_step: 1
+    stopping_step: 10
+    valid_metric: NDCG@50
+    topk:
+    - 1
+    - 5
+    - 10
+    - 15
+    - 20
+    - 25
+    - 30
+    - 35
+    - 40
+    - 45
+    - 50
+    - 55
+    - 60
+    - 65
+    - 70
+    - 75
+    - 80
+    - 85
+    - 90
+    - 95
+    - 100
+    eval_batch_size: 65536
+    metrics:
+    - Recall
+    - NDCG
+    beta: 1
+    epochs: 300
+    single_spec: true
+    data_path: /tmp2/yshuang/dagcf/dagcf/RecBole/dataset
+    embedding_size: 64
+    wandb_project: dagcf_case_study
+    log_wandb: true
+variable_config_dict:
+  desc: null
+  value: {}
+cmd_config_dict:
+  desc: null
+  value:
+    dataset: ml-1m
+    model: LightGCN
+    DA_sampling: none
+    config_files: ./configs/motivation_dagcf.yaml
+    seed: 2050
+    n_layers: 3
+    reg_weight: 0.001
+    learning_rate: 0.001
+    gpu_id: 0
+    tau_da: 1.0
+    beta_discount_factor: 0
+external_config_dict:
+  desc: null
+  value:
+    train_neg_sample_args:
+      distribution: uniform
+      sample_num: 1
+      alpha: 1.0
+      dynamic: false
+      candidate_num: 0
+    eval_step: 1
+    stopping_step: 10
+    valid_metric: NDCG@50
+    topk:
+    - 1
+    - 5
+    - 10
+    - 15
+    - 20
+    - 25
+    - 30
+    - 35
+    - 40
+    - 45
+    - 50
+    - 55
+    - 60
+    - 65
+    - 70
+    - 75
+    - 80
+    - 85
+    - 90
+    - 95
+    - 100
+    eval_batch_size: 65536
+    metrics:
+    - Recall
+    - NDCG
+    beta: 1
+    epochs: 300
+    single_spec: true
+    data_path: /tmp2/yshuang/dagcf/dagcf/RecBole/dataset
+    embedding_size: 64
+    wandb_project: dagcf_case_study
+    log_wandb: true
+    dataset: ml-1m
+    model: LightGCN
+    DA_sampling: none
+    config_files: ./configs/motivation_dagcf.yaml
+    seed: 2050
+    n_layers: 3
+    reg_weight: 0.001
+    learning_rate: 0.001
+    gpu_id: 0
+    tau_da: 1.0
+    beta_discount_factor: 0
+model:
+  desc: null
+  value: LightGCN
+model_class:
+  desc: null
+  value: recbole.model.general_recommender.lightgcn.LightGCN
+dataset:
+  desc: null
+  value: ml-1m
+internal_config_dict:
+  desc: null
+  value:
+    gpu_id: '0'
+    worker: 0
+    use_gpu: true
+    seed: 2020
+    state: INFO
+    reproducibility: true
+    data_path: dataset/
+    checkpoint_dir: saved
+    show_progress: true
+    save_dataset: false
+    dataset_save_path: null
+    save_dataloaders: false
+    dataloaders_save_path: null
+    log_wandb: false
+    wandb_project: recbole
+    shuffle: true
+    epochs: 300
+    train_batch_size: 2048
+    learner: adam
+    learning_rate: 0.001
+    train_neg_sample_args:
+      distribution: uniform
+      sample_num: 1
+      alpha: 1.0
+      dynamic: false
+      candidate_num: 0
+    eval_step: 1
+    stopping_step: 10
+    clip_grad_norm: null
+    weight_decay: 0.0
+    loss_decimal_place: 4
+    require_pow: false
+    enable_amp: false
+    enable_scaler: false
+    transform: null
+    eval_args:
+      split:
+        RS:
+        - 0.8
+        - 0.1
+        - 0.1
+      group_by: user
+      order: RO
+      mode: full
+    repeatable: false
+    metrics:
+    - Recall
+    - MRR
+    - NDCG
+    - Hit
+    - Precision
+    topk:
+    - 10
+    valid_metric: MRR@10
+    valid_metric_bigger: true
+    eval_batch_size: 4096
+    metric_decimal_place: 4
+    embedding_size: 64
+    n_layers: 2
+    reg_weight: 1.0e-05
+    field_separator: "\t"
+    seq_separator: ' '
+    USER_ID_FIELD: user_id
+    ITEM_ID_FIELD: item_id
+    RATING_FIELD: rating
+    TIME_FIELD: timestamp
+    seq_len: null
+    LABEL_FIELD: label
+    threshold: null
+    NEG_PREFIX: neg_
+    numerical_features: []
+    load_col:
+      inter:
+      - user_id
+      - item_id
+    unload_col: null
+    unused_col: null
+    additional_feat_suffix: null
+    rm_dup_inter: null
+    val_interval: null
+    filter_inter_by_user_or_item: true
+    user_inter_num_interval: '[0,inf)'
+    item_inter_num_interval: '[0,inf)'
+    alias_of_user_id: null
+    alias_of_item_id: null
+    alias_of_entity_id: null
+    alias_of_relation_id: null
+    preload_weight: null
+    normalize_field: null
+    normalize_all: null
+    discretization: null
+    ITEM_LIST_LENGTH_FIELD: item_length
+    LIST_SUFFIX: _list
+    MAX_ITEM_LIST_LENGTH: 50
+    POSITION_FIELD: position_id
+    HEAD_ENTITY_ID_FIELD: head_id
+    TAIL_ENTITY_ID_FIELD: tail_id
+    RELATION_ID_FIELD: relation_id
+    ENTITY_ID_FIELD: entity_id
+    kg_reverse_r: false
+    entity_kg_num_interval: '[0,inf)'
+    relation_kg_num_interval: '[0,inf)'
+    benchmark_filename: null
+    MODEL_TYPE: ModelType.GENERAL
+final_config_dict:
+  desc: null
+  value:
+    gpu_id: '0'
+    worker: 0
+    use_gpu: true
+    seed: 2050
+    state: INFO
+    reproducibility: true
+    data_path: /tmp2/yshuang/dagcf/dagcf/RecBole/dataset/ml-1m
+    checkpoint_dir: saved
+    show_progress: true
+    save_dataset: false
+    dataset_save_path: null
+    save_dataloaders: false
+    dataloaders_save_path: null
+    log_wandb: true
+    wandb_project: dagcf_case_study2050_ml-1m
+    shuffle: true
+    epochs: 300
+    train_batch_size: 2048
+    learner: adam
+    learning_rate: 0.001
+    train_neg_sample_args:
+      distribution: uniform
+      sample_num: 1
+      alpha: 1.0
+      dynamic: false
+      candidate_num: 0
+    eval_step: 1
+    stopping_step: 10
+    clip_grad_norm: null
+    weight_decay: 0.0
+    loss_decimal_place: 4
+    require_pow: false
+    enable_amp: false
+    enable_scaler: false
+    transform: null
+    eval_args:
+      split:
+        RS:
+        - 0.8
+        - 0.1
+        - 0.1
+      order: RO
+      group_by: user
+      mode:
+        valid: full
+        test: full
+    repeatable: false
+    metrics:
+    - Recall
+    - NDCG
+    topk:
+    - 1
+    - 5
+    - 10
+    - 15
+    - 20
+    - 25
+    - 30
+    - 35
+    - 40
+    - 45
+    - 50
+    - 55
+    - 60
+    - 65
+    - 70
+    - 75
+    - 80
+    - 85
+    - 90
+    - 95
+    - 100
+    valid_metric: NDCG@50
+    valid_metric_bigger: true
+    eval_batch_size: 65536
+    metric_decimal_place: 4
+    embedding_size: 64
+    n_layers: 3
+    reg_weight: 0.001
+    field_separator: "\t"
+    seq_separator: ' '
+    USER_ID_FIELD: user_id
+    ITEM_ID_FIELD: item_id
+    RATING_FIELD: rating
+    TIME_FIELD: timestamp
+    seq_len: null
+    LABEL_FIELD: label
+    threshold: null
+    NEG_PREFIX: neg_
+    numerical_features: []
+    load_col:
+      inter:
+      - user_id
+      - item_id
+    unload_col: null
+    unused_col: null
+    additional_feat_suffix: null
+    rm_dup_inter: null
+    val_interval: null
+    filter_inter_by_user_or_item: true
+    user_inter_num_interval: '[0,inf)'
+    item_inter_num_interval: '[0,inf)'
+    alias_of_user_id: null
+    alias_of_item_id: null
+    alias_of_entity_id: null
+    alias_of_relation_id: null
+    preload_weight: null
+    normalize_field: null
+    normalize_all: null
+    discretization: null
+    ITEM_LIST_LENGTH_FIELD: item_length
+    LIST_SUFFIX: _list
+    MAX_ITEM_LIST_LENGTH: 50
+    POSITION_FIELD: position_id
+    HEAD_ENTITY_ID_FIELD: head_id
+    TAIL_ENTITY_ID_FIELD: tail_id
+    RELATION_ID_FIELD: relation_id
+    ENTITY_ID_FIELD: entity_id
+    kg_reverse_r: false
+    entity_kg_num_interval: '[0,inf)'
+    relation_kg_num_interval: '[0,inf)'
+    benchmark_filename: null
+    MODEL_TYPE: ModelType.GENERAL
+    beta: 1
+    single_spec: true
+    dataset: ml-1m
+    model: LightGCN
+    DA_sampling: none
+    config_files: ./configs/motivation_dagcf.yaml
+    tau_da: 1.0
+    beta_discount_factor: 0
+    MODEL_INPUT_TYPE: InputType.PAIRWISE
+    eval_type: EvaluatorType.RANKING
+    local_rank: 0
+    device: cuda
+    valid_neg_sample_args:
+      distribution: uniform
+      sample_num: none
+    test_neg_sample_args:
+      distribution: uniform
+      sample_num: none
+_wandb:
+  desc: null
+  value:
+    python_version: 3.8.17
+    cli_version: 0.16.1
+    framework: torch
+    is_jupyter_run: false
+    is_kaggle_kernel: true
+    start_time: 1709203113.380555
+    t:
+      1:
+      - 1
+      - 5
+      - 36
+      - 53
+      - 55
+      2:
+      - 1
+      - 5
+      - 36
+      - 53
+      - 55
+      3:
+      - 7
+      - 13
+      - 16
+      - 23
+      4: 3.8.17
+      5: 0.16.1
+      8:
+      - 2
+      - 5
+      13: linux-x86_64
+    m:
+    - 1: train_step
+    - 1: train/epoch
+      5: 1
+      6:
+      - 1
+    - 1: train/train_loss
+      5: 1
+      6:
+      - 1
+    - 1: train/main_loss
+      5: 1
+      6:
+      - 1
+    - 1: train/da_loss
+      5: 1
+      6:
+      - 1
+    - 1: train/beta_e
+      5: 1
+      6:
+      - 1
+    - 1: valid_step
+    - 1: valid/recall@1
+      5: 7
+      6:
+      - 1
+    - 1: valid/recall@5
+      5: 7
+      6:
+      - 1
+    - 1: valid/recall@10
+      5: 7
+      6:
+      - 1
+    - 1: valid/recall@15
+      5: 7
+      6:
+      - 1
+    - 1: valid/recall@20
+      5: 7
+      6:
+      - 1
+    - 1: valid/recall@25
+      5: 7
+      6:
+      - 1
+    - 1: valid/recall@30
+      5: 7
+      6:
+      - 1
+    - 1: valid/recall@35
+      5: 7
+      6:
+      - 1
+    - 1: valid/recall@40
+      5: 7
+      6:
+      - 1
+    - 1: valid/recall@45
+      5: 7
+      6:
+      - 1
+    - 1: valid/recall@50
+      5: 7
+      6:
+      - 1
+    - 1: valid/recall@55
+      5: 7
+      6:
+      - 1
+    - 1: valid/recall@60
+      5: 7
+      6:
+      - 1
+    - 1: valid/recall@65
+      5: 7
+      6:
+      - 1
+    - 1: valid/recall@70
+      5: 7
+      6:
+      - 1
+    - 1: valid/recall@75
+      5: 7
+      6:
+      - 1
+    - 1: valid/recall@80
+      5: 7
+      6:
+      - 1
+    - 1: valid/recall@85
+      5: 7
+      6:
+      - 1
+    - 1: valid/recall@90
+      5: 7
+      6:
+      - 1
+    - 1: valid/recall@95
+      5: 7
+      6:
+      - 1
+    - 1: valid/recall@100
+      5: 7
+      6:
+      - 1
+    - 1: valid/ndcg@1
+      5: 7
+      6:
+      - 1
+    - 1: valid/ndcg@5
+      5: 7
+      6:
+      - 1
+    - 1: valid/ndcg@10
+      5: 7
+      6:
+      - 1
+    - 1: valid/ndcg@15
+      5: 7
+      6:
+      - 1
+    - 1: valid/ndcg@20
+      5: 7
+      6:
+      - 1
+    - 1: valid/ndcg@25
+      5: 7
+      6:
+      - 1
+    - 1: valid/ndcg@30
+      5: 7
+      6:
+      - 1
+    - 1: valid/ndcg@35
+      5: 7
+      6:
+      - 1
+    - 1: valid/ndcg@40
+      5: 7
+      6:
+      - 1
+    - 1: valid/ndcg@45
+      5: 7
+      6:
+      - 1
+    - 1: valid/ndcg@50
+      5: 7
+      6:
+      - 1
+    - 1: valid/ndcg@55
+      5: 7
+      6:
+      - 1
+    - 1: valid/ndcg@60
+      5: 7
+      6:
+      - 1
+    - 1: valid/ndcg@65
+      5: 7
+      6:
+      - 1
+    - 1: valid/ndcg@70
+      5: 7
+      6:
+      - 1
+    - 1: valid/ndcg@75
+      5: 7
+      6:
+      - 1
+    - 1: valid/ndcg@80
+      5: 7
+      6:
+      - 1
+    - 1: valid/ndcg@85
+      5: 7
+      6:
+      - 1
+    - 1: valid/ndcg@90
+      5: 7
+      6:
+      - 1
+    - 1: valid/ndcg@95
+      5: 7
+      6:
+      - 1
+    - 1: valid/ndcg@100
+      5: 7
+      6:
+      - 1
