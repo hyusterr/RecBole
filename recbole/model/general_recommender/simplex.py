@@ -36,8 +36,8 @@ class SimpleX(GeneralRecommender):
     """
     input_type = InputType.PAIRWISE
 
-    def __init__(self, config, dataset):
-        super(SimpleX, self).__init__(config, dataset)
+    def __init__(self, config, dataset, da_data_matrix):
+        super(SimpleX, self).__init__(config, dataset, da_data_matrix)
 
         # Get user history interacted items
         self.history_item_id, _, self.history_item_len = dataset.history_item_matrix(
@@ -185,8 +185,8 @@ class SimpleX(GeneralRecommender):
             require_pow=self.require_pow,
         )
 
-        loss = CCL_loss + self.reg_weight * reg_loss.sum()
-        return loss
+        # loss = CCL_loss + self.reg_weight * reg_loss.sum() # revise for DAtrainer
+        return CCL_loss, self.reg_weight * reg_loss.sum()
 
     def calculate_loss(self, interaction):
         r"""Data processing and call function forward(), return loss
@@ -213,8 +213,8 @@ class SimpleX(GeneralRecommender):
         # history_len
         history_len = self.history_item_len[user]
 
-        loss = self.forward(user, pos_item, history_item, history_len, neg_item_seq)
-        return loss
+        main_loss, reg_loss_with_weight = self.forward(user, pos_item, history_item, history_len, neg_item_seq)
+        return main_loss, reg_loss_with_weight
 
     def predict(self, interaction):
         user = interaction[self.USER_ID]

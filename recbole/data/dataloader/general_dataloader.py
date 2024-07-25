@@ -258,10 +258,10 @@ class FullSortEvalDataLoader(AbstractDataLoader):
     def collate_fn(self, index):
         index = np.array(index)
         if not self.is_sequential:
-            user_df = self.user_df[index]
-            uid_list = list(user_df[self.uid_field])
+            user_df = self.user_df[index] # get sub-df of user id
+            uid_list = list(user_df[self.uid_field]) # list of the user id in the batch
 
-            history_item = self.uid2history_item[uid_list]
+            history_item = self.uid2history_item[uid_list] # get the history ids of the user = used item - positive item
             positive_item = self.uid2positive_item[uid_list]
 
             history_u = torch.cat(

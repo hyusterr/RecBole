@@ -492,7 +492,6 @@ class Config(object):
                 if len(gpu_id) == 0 or not torch.cuda.is_available()
                 else torch.device(f"cuda")
             )
-            print('successfully set device')
         else:
             assert len(gpu_id.split(",")) >= self.final_config_dict["nproc"]
             torch.distributed.init_process_group(
@@ -514,6 +513,7 @@ class Config(object):
                 self.final_config_dict["state"] = "error"
                 self.final_config_dict["show_progress"] = False
                 self.final_config_dict["verbose"] = False
+        print("setting device at:", self.final_config_dict["device"])
 
     def _set_train_neg_sample_args(self):
         train_neg_sample_args = self.final_config_dict.get("train_neg_sample_args")

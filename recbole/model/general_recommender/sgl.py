@@ -221,7 +221,7 @@ class SGL(GeneralRecommender):
         ) + self.calc_ssl_loss(
             user_list, pos_item_list, user_sub1, user_sub2, item_sub1, item_sub2
         )
-        return total_loss
+        return total_loss, torch.tensor(0.0) # for occupy the second return value
 
     def calc_bpr_loss(
         self, user_emd, item_emd, user_list, pos_item_list, neg_item_list

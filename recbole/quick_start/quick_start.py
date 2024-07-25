@@ -14,7 +14,10 @@ recbole.quick_start
 import logging
 from logging import getLogger
 
+import os
 import sys
+import time
+import numpy as np
 
 
 import pickle
@@ -26,6 +29,7 @@ from recbole.data import (
     data_preparation,
     save_split_dataloaders,
     load_split_dataloaders,
+    prepare_DA_data_matrix
 )
 from recbole.data.transform import construct_transform
 from recbole.utils import (
@@ -193,8 +197,27 @@ def load_data_and_model(model_file):
     logger.info(dataset)
     train_data, valid_data, test_data = data_preparation(config, dataset)
 
+
+    # prepare DA_data_matrix
+    if config['DA_matrix_path'] is not None:
+        train_data_matrix = np.load(config['DA_matrix_path'])['dist_array']
+    else:
+        try:
+            train_data_matrix = np.load(os.path.join(config['data_path'], f'tau-{config["tau_da"]}_seed-{config["seed"]}_dist_data.npz'))['dists_array']
+        except Exception as e:
+            print(e)
+            logger.info('DA_matrix_path is None, and DA_data_matrix is not found, so we will prepare DA_data_matrix')
+            start = time.time()
+            train_data_matrix = prepare_DA_data_matrix(train_data, config)
+            logger.info(f'prepare DA_data_matrix cost {time.time() - start} s')
+    start = time.time()
+    train_data_matrix = torch.from_numpy(train_data_matrix).float()
+    print('train_data_matrix:', train_data_matrix)
+    logger.info(f'load DA_data_matrix cost {time.time() - start} s')
+
     init_seed(config["seed"], config["reproducibility"])
-    model = get_model(config["model"])(config, train_data._dataset).to(config["device"])
+    # the DA-data matrix is bound with seed, so the training will not peek answer
+    model = get_model(config["model"])(config, train_data._dataset, train_data_matrix).to(config["device"])
     model.load_state_dict(checkpoint["state_dict"])
     model.load_other_parameter(checkpoint.get("other_parameter"))
 

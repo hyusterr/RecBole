@@ -57,4 +57,4 @@ class SimGCL(LightGCN):
         user_cl_loss = self.calculate_cl_loss(perturbed_user_embs_1[user], perturbed_user_embs_2[user])
         item_cl_loss = self.calculate_cl_loss(perturbed_item_embs_1[pos_item], perturbed_item_embs_2[pos_item])
 
-        return loss + self.cl_rate * (user_cl_loss + item_cl_loss)
+        return loss + self.cl_rate * (user_cl_loss + item_cl_loss), torch.tensor(0.0) # for occupy the second return value

@@ -115,6 +115,7 @@ class LRGCCF(GeneralRecommender):
             )
         )
         A._update(data_dict)
+        # different from LightGCN, LRGCCF consider self connection
         A_tilde = A + sp.eye(A.shape[0])
 
         # norm adj matrix
@@ -152,7 +153,11 @@ class LRGCCF(GeneralRecommender):
             all_embeddings = torch.sparse.mm(self.norm_adj_matrix, all_embeddings)
             all_embeddings = linear_layer(all_embeddings)
             embeddings_list.append(all_embeddings)
+            # print("all_embeddings.shape", all_embeddings.shape)
+        # resiude connection so cat the origin embedding
         lrgccf_all_embeddings = torch.cat(embeddings_list, dim=1)
+        # print("lrgccf_all_embeddings.shape", lrgccf_all_embeddings.shape) 
+        # (N, 256) = (N, 64) + (N, 64) + (N, 64) + (N, 64)
 
         user_all_embeddings, item_all_embeddings = torch.split(
             lrgccf_all_embeddings, [self.n_users, self.n_items]
@@ -170,7 +175,7 @@ class LRGCCF(GeneralRecommender):
 
         user_all_embeddings, item_all_embeddings = self.forward()
         
-        # add for dagcf; renew the embeddings
+        # add for dagcf; renew the embeddings # this is on device
         self.get_user_embedding_da = user_all_embeddings
         self.get_item_embedding_da = item_all_embeddings
         self.get_all_embedding_da = torch.cat([user_all_embeddings, item_all_embeddings])

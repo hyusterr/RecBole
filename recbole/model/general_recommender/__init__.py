@@ -29,3 +29,5 @@ from recbole.model.general_recommender.sgl import SGL
 from recbole.model.general_recommender.admmslim import ADMMSLIM
 from recbole.model.general_recommender.simplex import SimpleX
 from recbole.model.general_recommender.lrgccf import LRGCCF
+from recbole.model.general_recommender.mawu import MAWU
+from recbole.model.general_recommender.diffrec import DiffRec

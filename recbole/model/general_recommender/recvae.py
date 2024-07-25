@@ -112,8 +112,8 @@ class RecVAE(GeneralRecommender, AutoEncoderMixin):
     """
     input_type = InputType.PAIRWISE
 
-    def __init__(self, config, dataset):
-        super(RecVAE, self).__init__(config, dataset)
+    def __init__(self, config, dataset, da_data_matrix):
+        super(RecVAE, self).__init__(config, dataset, da_data_matrix)
 
         self.hidden_dim = config["hidden_dimension"]
         self.latent_dim = config["latent_dimension"]

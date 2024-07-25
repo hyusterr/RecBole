@@ -312,7 +312,7 @@ class GeneralRecommender(AbstractRecommender):
 
     def preselect_anchor(self): 
         anchor_set_id = self.get_random_anchorset(self.n_users+self.n_items, c=1)
-        print('anchor_set_id shape:', len(anchor_set_id), [len(a) for a in anchor_set_id])
+        # print('anchor_set_id shape:', len(anchor_set_id), [len(a) for a in anchor_set_id])
         dist_max, dist_argmax = self.get_dist_max(anchor_set_id, self.data_dist_matrix)
         return anchor_set_id, dist_max, dist_argmax
 

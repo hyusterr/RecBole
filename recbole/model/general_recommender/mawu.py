@@ -12,27 +12,37 @@ from recbole.model.init import xavier_normal_initialization
 from recbole.utils import InputType
 
 
-class DirectAU(GeneralRecommender):
-    input_type = InputType.PAIRWISE
+class MAWU(GeneralRecommender):
+    input_type = InputType.POINTWISE
 
     def __init__(self, config, dataset, da_data_matrix):
-        super(DirectAU, self).__init__(config, dataset, da_data_matrix)
+        super(MAWU, self).__init__(config, dataset, da_data_matrix)
 
         # load parameters info
         self.embedding_size = config['embedding_size']
-        self.gamma = config['gamma'] if 'gamma' in config else 1.0
-        self.encoder_name = config['encoder'] if 'encoder' in config else 'MF'
+        self.gamma1 = config['gamma1']
+        self.gamma2 = config['gamma2']
+
+        self.encoder_name = config['encoder']
+        if config['margin'] == "None":
+            self.margin = None
+        else:
+            self.margin = config['margin']
 
         # define layers and loss
         if self.encoder_name == 'MF':
             self.encoder = MFEncoder(self.n_users, self.n_items, self.embedding_size)
         elif self.encoder_name == 'LightGCN':
-            self.n_layers = config['n_layers'] if 'n_layers' in config else 2 # LGCN-2 is recommended by the original paper
+            self.n_layers = config['n_layers']
             self.interaction_matrix = dataset.inter_matrix(form='coo').astype(np.float32)
             self.norm_adj = self.get_norm_adj_mat().to(self.device)
             self.encoder = LGCNEncoder(self.n_users, self.n_items, self.embedding_size, self.norm_adj, self.n_layers)
         else:
             raise ValueError('Non-implemented Encoder.')
+
+        # user, item margin
+        self.user_margin = nn.Embedding(self.n_users, 1)
+        self.item_margin = nn.Embedding(self.n_items, 1)
 
         # storage variables for full sort evaluation acceleration
         self.restore_user_e = None
@@ -60,7 +70,7 @@ class DirectAU(GeneralRecommender):
         L = sp.coo_matrix(L)
         row = L.row
         col = L.col
-        i = torch.LongTensor([row, col])
+        i = torch.LongTensor(np.array([row, col]))
         data = torch.FloatTensor(L.data)
         SparseL = torch.sparse.FloatTensor(i, data, torch.Size(L.shape))
         return SparseL
@@ -74,34 +84,65 @@ class DirectAU(GeneralRecommender):
         return (x - y).norm(p=2, dim=1).pow(alpha).mean()
 
     @staticmethod
+    def alignment_dot(x, y):
+        return -torch.sum(x * y, dim=-1).mean()
+
+    @staticmethod
+    def alignment_margin(x, y, margin):
+        cos_sim = torch.sum(x * y, dim=-1) # dot product
+        angle_ui = torch.arccos(torch.clamp(cos_sim,-1+1e-7,1-1e-7)) # clipping
+        angle_ui_plus_margin = angle_ui + (1 - torch.sigmoid(margin))
+        angle_ui_plus_margin = torch.clamp(angle_ui_plus_margin, 0., np.pi)
+        
+        cos_sim_margin = torch.cos(angle_ui_plus_margin)
+        
+        return -cos_sim_margin.mean()
+
+    @staticmethod
     def uniformity(x, t=2):
         return torch.pdist(x, p=2).pow(2).mul(-t).exp().mean().log()
+
+    @staticmethod
+    def uniformity_dot(x, t=2):
+        cos_sim = F.cosine_similarity(x[:,:,None], x.t()[None,:,:])
+        # take lower triangular matrix
+        cos_sim = torch.tril(cos_sim, diagonal=-1)
+        # convert cos_sim to distance
+        cos_sim = 2 - 2 * cos_sim
+
+        return cos_sim.mul(-t).exp().mean().log()
 
     def calculate_loss(self, interaction):
         if self.restore_user_e is not None or self.restore_item_e is not None:
             self.restore_user_e, self.restore_item_e = None, None
 
-        # for dagcf
-        self.get_user_embedding_da = self.encoder.user_embedding.weight
-        self.get_item_embedding_da = self.encoder.item_embedding.weight
-        self.get_all_embedding_da = torch.cat([self.get_user_embedding_da, self.get_item_embedding_da])
-
         user = interaction[self.USER_ID]
         item = interaction[self.ITEM_ID]
-
         user_e, item_e = self.forward(user, item)
-        align = self.alignment(user_e, item_e)
-        uniform = self.gamma * (self.uniformity(user_e) + self.uniformity(item_e)) / 2
 
-        # directau do not have regularization
-        return align + uniform, 0 # 0 means no regularization, blank to be catch by DAtrainer
-        # return main_loss, reg_loss * reg_weight
+        # adaptive margin
+        user_margin = self.user_margin(user)
+        item_margin = self.item_margin(item)
+        margin = user_margin + item_margin
+        
+        # margin-aware alignment and weighted uniformity losses
+        align_margin = self.alignment_margin(user_e, item_e, margin)
+        uniform = self.gamma1 * self.uniformity_dot(user_e) + self.gamma2 * self.uniformity_dot(item_e)
+
+        loss = align_margin + uniform
+
+        # clip user/item margin
+        self.user_margin.weight.data = torch.clamp(self.user_margin.weight.data, min=0.0, max=1.0)
+        self.item_margin.weight.data = torch.clamp(self.item_margin.weight.data, min=0.0, max=1.0)
+
+        return loss, torch.tensor(0.0).to(self.device)
+        # for occpuying the second return value
 
     def predict(self, interaction):
         user = interaction[self.USER_ID]
         item = interaction[self.ITEM_ID]
-        user_e = self.user_embedding(user)
-        item_e = self.item_embedding(item)
+        user_e = self.encoder.user_embedding(user)
+        item_e = self.encoder.item_embedding(item)
         return torch.mul(user_e, item_e).sum(dim=1)
 
     def full_sort_predict(self, interaction):

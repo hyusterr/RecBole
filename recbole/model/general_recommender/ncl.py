@@ -268,9 +268,11 @@ class NCL(GeneralRecommender):
 
         
         # add for dagcf; renew the embeddings
+        '''
         self.get_user_embedding_da = user_all_embeddings
         self.get_item_embedding_da = item_all_embeddings
         self.get_all_embedding_da = torch.cat([user_all_embeddings, item_all_embeddings])
+        '''
         
 
         # calculate BPR Loss
