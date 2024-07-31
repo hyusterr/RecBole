@@ -1,21 +1,24 @@
 da=none
-model=SGL
-learning_rate=0.001 # use default of recbole
+model=MAWU
+learning_rate=0.001
 seed=$1
 gpu_id=$2
 tau_da=1.0 # just for occupy
 beta_discount_factor=0 # just for occupy
-reg_weight=1e-5 # default of sgl
-for dataset in lastfm amazon-magazine-subscriptions-18 pinterest ml-1m ml-100k
+reg_weight=0.01 # just for occupy
+for dataset in pinterest
 do
-for ssl_tau in 0.1 0.2 0.5 1.0
+for encoder in LightGCN MF 
 do
-for drop_ratio in 0 0.1 0.2 0.4 0.5
+for gamma1 in 0.1 0.5 1 2 5
+do
+for gamma2 in 0.1 0.5 1 2 5
 do 
-for ssl_weight in 0.005 0.05 0.1 0.5 1.0
+for weight_decay in 0 1e-4 1e-6 1e-8 
 do
 python3 run_dagcf.py --dataset=$dataset --model=$model --DA_sampling=$da --config_files=./configs/general_dagcf.yaml --seed=$seed --tau_da=$tau_da --beta_discount_factor=$beta_discount_factor --reg_weight=$reg_weight --learning_rate=$learning_rate --gpu_id=$gpu_id \
---ssl_tau=$ssl_tau --drop_ratio=$drop_ratio --ssl_weight=$ssl_weight
+--gamma1=$gamma1 --gamma2=$gamma2 --weight_decay=$weight_decay --encoder=$encoder --n_layers=2 # LGCN-2 is recommended by the original paper
+done
 done
 done
 done
